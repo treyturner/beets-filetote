@@ -2,6 +2,7 @@
 
 import contextlib
 import logging
+import shlex
 import shutil
 from collections.abc import Generator
 from pathlib import Path
@@ -9,6 +10,7 @@ from typing import Any, Literal
 
 from beets import config, library, plugins, util
 from beets.importer import ImportSession
+from beets.ui.commands import default_commands
 from mediafile import MediaFile
 
 from ._item_model import MediaMeta
@@ -16,27 +18,6 @@ from .assertions import BeetsAssertions
 from .logging import LogLevels, capture_beets_log
 from .media import MediaCreator, MediaSetup
 from .plugin_lifecycle import _activate_plugins, _deactivate_plugins
-
-# TODO(gtronset): Remove this once beets 2.12 and below are no longer supported.
-# https://github.com/gtronset/beets-filetote/pull/370
-try:
-    from beets.ui.commands.modify import ModifyOperation
-except ImportError:
-    ModifyOperation = None  # type: ignore[assignment,misc]
-
-# TODO(gtronset): Remove this once beets 2.4 and 2.5 are no longer supported.
-# https://github.com/gtronset/beets-filetote/pull/253
-try:
-    from beets.ui.commands.modify import modify_items
-    from beets.ui.commands.move import move_items
-    from beets.ui.commands.update import update_items
-except ImportError:
-    from beets.ui.commands import (
-        modify_items,
-        move_items,
-        update_items,
-    )
-
 
 log = logging.getLogger("beets")
 
@@ -425,26 +406,36 @@ class BeetsPluginFixture(BeetsAssertions, MediaCreator):
 
         self.importer.run()
 
+    def _run_subcommand(
+        self, name: Literal["move", "modify", "update"], args: list[str]
+    ) -> None:
+        """Use Beets' CLI parser and handler across internal helper API changes."""
+        command = next(cmd for cmd in default_commands if cmd.name == name)
+        opts, positional_args = command.parser.parse_args(args)
+        command.func(self.lib, opts, positional_args)
+
     def _run_cli_move(  # ruff: ignore[too-many-arguments]
         self,
         query: str,
         dest_dir: bytes | None = None,
-        album: str | None = None,
+        album: bool = False,
         copy: bool = False,
         pretend: bool = False,
         export: bool = False,
     ) -> None:
         """Run the `move` CLI command."""
-        move_items(
-            self.lib,
-            dest_dir,
-            query=query,
-            copy=copy,
-            album=album,
-            pretend=pretend,
-            confirm=False,
-            export=export,
-        )
+        args = []
+        if dest_dir is not None:
+            args.extend(["--dest", util.syspath(dest_dir)])
+        for option, enabled in (
+            ("--album", album),
+            ("--copy", copy),
+            ("--pretend", pretend),
+            ("--export", export),
+        ):
+            if enabled:
+                args.append(option)
+        self._run_subcommand("move", [*args, "--", *shlex.split(query)])
 
     def _run_cli_modify(  # ruff: ignore[too-many-arguments]
         self,
@@ -456,52 +447,32 @@ class BeetsPluginFixture(BeetsAssertions, MediaCreator):
         album: bool = False,
     ) -> None:
         """Run the `modify` CLI command."""
-        dels = dels or []
-        if ModifyOperation is not None:
-            modify_items(
-                lib=self.lib,
-                mods={
-                    field: ModifyOperation(operator=None, value=val)
-                    for field, val in (mods or {}).items()
-                },
-                dels=dels,
-                query=query,
-                write=write,
-                move=move,
-                album=album,
-                confirm=False,
-                inherit=True,
-            )
-        else:
-            # TODO(gtronset): Remove this once beets 2.12 and below are no longer
-            # supported.
-            # https://github.com/gtronset/beets-filetote/pull/370
-            modify_items(
-                lib=self.lib,
-                mods=mods or {},
-                dels=dels,
-                query=query,
-                write=write,
-                move=move,
-                album=album,
-                confirm=False,
-                inherit=True,
-            )
+        args = [
+            "--yes",
+            "--write" if write else "--nowrite",
+            "--move" if move else "--nomove",
+        ]
+        if album:
+            args.append("--album")
+        args.extend(["--", *shlex.split(query)])
+        args.extend(f"{field}={value}" for field, value in (mods or {}).items())
+        args.extend(f"{field}!" for field in dels or [])
+        self._run_subcommand("modify", args)
 
     def _run_cli_update(
         self,
         query: str,
-        album: str | None = None,
+        album: bool = False,
         move: bool = True,
         pretend: bool = False,
         fields: list[str] | None = None,
     ) -> None:
         """Run the `update` CLI command."""
-        update_items(
-            lib=self.lib,
-            query=query,
-            album=album,
-            move=move,
-            pretend=pretend,
-            fields=fields,
-        )
+        args = ["--move" if move else "--nomove"]
+        if album:
+            args.append("--album")
+        if pretend:
+            args.append("--pretend")
+        for field in fields or []:
+            args.extend(["--field", field])
+        self._run_subcommand("update", [*args, "--", *shlex.split(query)])

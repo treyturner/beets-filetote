@@ -560,6 +560,7 @@ commands = [
         "uv",
         "run",
         "--active",
+        "--no-sync",
         "mypy",
         "--config-file",
         "/dev/null",

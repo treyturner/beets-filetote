@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Run CLI integration tests through Beets' command handlers to support the command
+  API refactor on Beets `master`, while retaining compatibility with older releases.
+- Keep Beets `master` installed during its mypy check instead of resyncing to the
+  locked release, and accept the string path formats returned by newer Beets.
+
 ## [1.3.7] - 2026-08-04
 
 ### Changed

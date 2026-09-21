@@ -104,7 +104,8 @@ class TestCLIOperation:
 
         env.assert_in_lib_dir("Tag Artist/Tag Album/artifact.file")
 
-    def test_move_on_move_command(self) -> None:
+    @pytest.mark.parametrize("album", [False, True])
+    def test_move_on_move_command(self, album: bool) -> None:
         """Check that plugin detects the correct operation for the `move` (or `mv`)
         command, which is `MOVE` by default.
         """
@@ -123,7 +124,7 @@ class TestCLIOperation:
             ("default", env.fmt_path("$artist", "$album", "$title")),
         ]
 
-        env.run_cli_command("move", query="artist:'Tag Artist'")
+        env.run_cli_command("move", query="album:'Tag Album'", album=album)
 
         env.assert_not_in_lib_dir("Old Lib Artist/Tag Album/artifact.file")
 
@@ -214,7 +215,28 @@ class TestCLIOperation:
             not item["comments"] for item in env.lib.items("artist:'Tag Artist New'")
         )
 
-    def test_move_on_update_move_command(self) -> None:
+    def test_move_on_modify_album_command(self) -> None:
+        """Album modifications move artifacts and update the album's tracks."""
+        env = self.env
+        env.create_flat_import_dir()
+        env.setup_import_session(move=True, autotag=False)
+        env.run_cli_command("import")
+
+        env.run_cli_command(
+            "modify",
+            query="album:'Tag Album'",
+            mods={"album": "New Album"},
+            album=True,
+        )
+
+        env.assert_not_in_lib_dir("Tag Artist/Tag Album/artifact.file")
+        env.assert_in_lib_dir("Tag Artist/New Album/artifact.file")
+        items = list(env.lib.items())
+        assert len(items) == env.media_count
+        assert all(item.album == "New Album" for item in items)
+
+    @pytest.mark.parametrize("album", [False, True])
+    def test_move_on_update_move_command(self, album: bool) -> None:
         """Check that plugin detects the correct operation for the `update` command,
         which will `MOVE` by default.
         """
@@ -231,7 +253,11 @@ class TestCLIOperation:
         )
 
         env.run_cli_command(
-            "update", query="artist:'Tag Artist'", fields=["artist"], move=True
+            "update",
+            query="album:'Tag Album'",
+            album=album,
+            fields=["artist"],
+            move=True,
         )
 
         env.assert_not_in_lib_dir("Tag Artist/Tag Album/artifact.file")

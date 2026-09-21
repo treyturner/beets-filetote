@@ -276,7 +276,7 @@ class FiletotePlugin(BeetsPlugin):
         path_formats |= self.filetote_config.paths
 
         beets_path_query: str
-        beets_path_format: Template
+        beets_path_format: str | Template
 
         for beets_path_query, beets_path_format in _get_path_formats(config["paths"]):
             for filetote_query in queries:
