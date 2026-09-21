@@ -57,6 +57,10 @@ Tests use [`pytest`] with isolated fixtures provided by the `pytest_beets_plugin
 framework in `tests/pytest_beets_plugin/`. Each test gets a fully isolated beets
 environment (config, library, I/O) via temporary directories.
 
+The `move`, `modify`, and `update` helpers use Beets' command parsers and handlers
+so the same tests exercise CLI behavior across supported Beets versions without
+depending on internal helper signatures.
+
 [`pytest`]: https://docs.pytest.org/
 
 ### Running Tests
